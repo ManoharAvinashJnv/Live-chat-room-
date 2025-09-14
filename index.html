@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Chat Room</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 100px); /* Adjust based on header/footer */
+            max-height: 100vh;
+        }
+        .message-list {
+            flex-grow: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch; /* Enable smooth scrolling on iOS */
+            padding-bottom: 2rem;
+            scroll-behavior: smooth;
+        }
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 antialiased text-gray-800">
+
+    <div id="app" class="flex flex-col h-screen overflow-hidden">
+        <!-- Loading State -->
+        <div id="loading" class="loading-overlay hidden">
+            <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-500"></div>
+        </div>
+
+        <!-- Auth and Room Selection UI -->
+        <div id="auth-screen" class="p-6 md:p-10 flex flex-col items-center justify-center min-h-screen transition-opacity duration-500 ease-in-out">
+            <div class="w-full max-w-sm bg-white p-8 rounded-2xl shadow-xl text-center">
+                <h1 class="text-3xl font-bold text-center text-indigo-700 mb-6">Live Chat</h1>
+                <p class="text-center text-gray-500 mb-8">Sign in to start chatting.</p>
+
+                <div class="space-y-4">
+                    <button id="google-login-btn" class="w-full bg-red-600 text-white font-semibold py-3 rounded-lg hover:bg-red-700 transition duration-200 flex items-center justify-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" class="h-5 w-5"><path d="M22.56 12.25c0-.78-.07-1.5-.19-2.22H12.28v4.16h5.81c-.26 1.48-1.04 2.74-2.21 3.63v2.85h3.69c2.16-2 3.44-4.89 3.44-8.32z" /><path d="M12.28 22.84c3.08 0 5.67-1.02 7.55-2.77l-3.69-2.85c-1.03.7-2.34 1.11-3.86 1.11-2.98 0-5.5-2.02-6.42-4.75H2.43v2.85A10.63 10.63 0 0012.28 22.84z" /><path d="M5.86 14.11c-.23-.69-.36-1.42-.36-2.19s.13-1.5.36-2.19V6.92H2.43a10.63 10.63 0 000 10.08l3.43-2.89z" /><path d="M12.28 4.67c1.78 0 3.39.61 4.65 1.78l3.2-3.12A10.63 10.63 0 0012.28 0c-2.92 0-5.46.99-7.39 2.77l3.43 2.85c.9-.73 2.06-1.15 3.96-1.15z" /></svg>
+                        <span>Continue with Google</span>
+                    </button>
+                    <!-- Or Separator -->
+                    <div class="relative flex items-center py-5">
+                        <div class="flex-grow border-t border-gray-400"></div>
+                        <span class="flex-shrink mx-4 text-gray-500">OR</span>
+                        <div class="flex-grow border-t border-gray-400"></div>
+                    </div>
+                    <p class="text-sm text-gray-500">Sign in with phone number is coming soon</p>
+                    <div id="auth-message" class="mt-4 text-center text-red-500 text-sm"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Room Selection UI -->
+        <div id="room-selection-screen" class="hidden p-6 md:p-10 flex flex-col items-center justify-center min-h-screen transition-opacity duration-500 ease-in-out">
+            <div class="w-full max-w-lg bg-white p-8 rounded-2xl shadow-xl text-center">
+                <h1 class="text-3xl font-bold text-center text-indigo-700 mb-6">Welcome!</h1>
+                <p class="text-center text-gray-500 mb-8">Choose an option to get started.</p>
+                <div class="grid md:grid-cols-2 gap-6">
+                    <button id="create-room-btn" class="bg-indigo-600 text-white font-semibold py-4 rounded-lg hover:bg-indigo-700 transition duration-200 text-lg shadow-md">Create a New Room</button>
+                    <button id="join-room-btn" class="bg-indigo-600 text-white font-semibold py-4 rounded-lg hover:bg-indigo-700 transition duration-200 text-lg shadow-md">Join an Existing Room</button>
+                </div>
+            </div>
+            <div class="mt-8">
+                <button id="logout-btn" class="bg-gray-200 text-gray-700 text-sm font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition duration-200">Logout</button>
+            </div>
+        </div>
+
+        <!-- Main Chat UI -->
+        <div id="chat-screen" class="hidden flex flex-col flex-1 transition-opacity duration-500 ease-in-out">
+            <header class="bg-white shadow-sm p-4 flex justify-between items-center z-10">
+                <h1 id="room-header" class="text-lg font-semibold text-gray-900">Room: <span id="current-room"></span></h1>
+                <div class="flex items-center space-x-2">
+                    <span id="user-info" class="text-sm text-gray-500 truncate hidden md:block"></span>
+                    <button id="back-to-rooms-btn" class="bg-gray-200 text-gray-700 text-xs font-semibold py-2 px-3 rounded-md hover:bg-gray-300 transition duration-200">Back</button>
+                    <button id="logout-btn-chat" class="bg-gray-200 text-gray-700 text-xs font-semibold py-2 px-3 rounded-md hover:bg-gray-300 transition duration-200">Logout</button>
+                </div>
+            </header>
+
+            <!-- Chat messages container -->
+            <main class="flex-1 p-4 overflow-y-auto message-list">
+                <div id="messages-container" class="space-y-4">
+                    <!-- Messages will be injected here by JavaScript -->
+                </div>
+            </main>
+
+            <!-- Message input form -->
+            <div class="bg-white p-4 shadow-top z-10">
+                <form id="message-form" class="flex items-center space-x-2">
+                    <input type="text" id="message-input" placeholder="Type a message..." class="flex-1 px-4 py-3 rounded-full bg-gray-100 border-2 border-gray-200 focus:outline-none focus:border-indigo-500 transition duration-200" required>
+                    <button type="submit" class="bg-indigo-600 text-white p-3 rounded-full hover:bg-indigo-700 transition duration-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                        </svg>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <footer class="bg-gray-800 text-white text-center text-sm py-4">
+        <p class="text-gray-400">© 2025 Live Chat Room. All rights reserved.</p>
+        <p class="mt-1 text-gray-400">This site is built by Manohar Avinash</p>
+    </footer>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
+
+    <script>
+        // Global variables provided by the Gemini platform environment
+        const appId = "1:485493710475:web:46ccdd7da0d99da8613e8e";
+        const firebaseConfig = {
+          apiKey: "AIzaSyCu0xkuSmLK-namsK3rUGErZmj_MBfijnI",
+          authDomain: "live-chat-room-55959.firebaseapp.com",
+          projectId: "live-chat-room-55959",
+          storageBucket: "live-chat-room-55959.firebasestorage.app",
+          messagingSenderId: "485493710475",
+          appId: "1:485493710475:web:46ccdd7da0d99da8613e8e",
+          measurementId: "G-YRMFHB70MZ"
+        };
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db, auth, roomRef, messagesListener;
+        let isAuthReady = false;
+
+        const authScreen = document.getElementById('auth-screen');
+        const roomSelectionScreen = document.getElementById('room-selection-screen');
+        const chatScreen = document.getElementById('chat-screen');
+        const loadingOverlay = document.getElementById('loading');
+        const googleLoginBtn = document.getElementById('google-login-btn');
+        const createRoomBtn = document.getElementById('create-room-btn');
+        const joinRoomBtn = document.getElementById('join-room-btn');
+        const authMessage = document.getElementById('auth-message');
+        const logoutBtn = document.getElementById('logout-btn');
+        const backToRoomsBtn = document.getElementById('back-to-rooms-btn');
+        const logoutBtnChat = document.getElementById('logout-btn-chat');
+        const messagesContainer = document.getElementById('messages-container');
+        const messageForm = document.getElementById('message-form');
+        const messageInput = document.getElementById('message-input');
+        const currentRoomDisplay = document.getElementById('current-room');
+        const userInfoDisplay = document.getElementById('user-info');
+
+        // Display a message in the UI
+        function showMessage(element, message, type = 'error') {
+            element.textContent = message;
+            element.className = `mt-4 text-center text-sm ${type === 'error' ? 'text-red-500' : 'text-green-500'}`;
+        }
+
+        // Show/hide UI based on authentication state
+        function showRoomSelectionUI() {
+            authScreen.classList.add('hidden');
+            chatScreen.classList.add('hidden');
+            roomSelectionScreen.classList.remove('hidden');
+        }
+
+        function showChatUI(user) {
+            authScreen.classList.add('hidden');
+            roomSelectionScreen.classList.add('hidden');
+            chatScreen.classList.remove('hidden');
+            userInfoDisplay.textContent = `User: ${user.displayName || user.email || 'Guest'}`;
+            userInfoDisplay.classList.remove('hidden');
+        }
+
+        function showAuthUI() {
+            authScreen.classList.remove('hidden');
+            roomSelectionScreen.classList.add('hidden');
+            chatScreen.classList.add('hidden');
+            if (messagesListener) {
+                messagesListener(); // Unsubscribe from old room
+            }
+            messagesContainer.innerHTML = '';
+        }
+
+        // Setup the Firebase SDKs
+        function initializeFirebase() {
+            if (!firebaseConfig) {
+                showMessage(authMessage, "Firebase config not found. Please provide the config.");
+                return;
+            }
+            try {
+                const app = firebase.initializeApp(firebaseConfig);
+                auth = app.auth();
+                db = app.database();
+            } catch (error) {
+                console.error("Firebase initialization error:", error);
+                showMessage(authMessage, `Firebase Init Error: ${error.message}`);
+                return;
+            }
+
+            // Listen for auth state changes
+            auth.onAuthStateChanged(user => {
+                isAuthReady = true;
+                loadingOverlay.classList.add('hidden');
+                if (user) {
+                    showRoomSelectionUI();
+                } else {
+                    showAuthUI();
+                }
+            });
+
+            // Handle the initial custom auth token if available
+            if (initialAuthToken) {
+                auth.signInWithCustomToken(initialAuthToken).catch(error => {
+                    console.error("Custom token sign-in failed:", error);
+                    auth.signInAnonymously();
+                });
+            } else {
+                auth.signInAnonymously().catch(error => {
+                    console.error("Anonymous sign-in failed:", error);
+                });
+            }
+        }
+
+        // Room setup and message listener
+        function setupRoom(roomName, roomPassword) {
+            currentRoomDisplay.textContent = roomName;
+            if (messagesListener) {
+                messagesListener(); // Unsubscribe from previous room
+            }
+
+            // Use a simplified room ID to avoid complex path logic
+            const roomId = btoa(roomName); // Base64 encode the room name
+            
+            // Check password if joining
+            const roomsRef = db.ref(`artifacts/${appId}/rooms/${roomId}`);
+            roomsRef.once('value').then(snapshot => {
+                const roomData = snapshot.val();
+                if (roomData && roomData.password !== roomPassword) {
+                    alert("Incorrect room password. Please try again.");
+                    showRoomSelectionUI();
+                    return;
+                }
+                
+                // If room doesn't exist, create it
+                if (!roomData) {
+                    roomsRef.set({ password: roomPassword });
+                }
+
+                showChatUI(auth.currentUser);
+
+                roomRef = db.ref(`artifacts/${appId}/rooms/${roomId}/messages`);
+                
+                // Calculate timestamp for the last 7 days
+                const now = Date.now();
+                const oneWeekAgo = now - (7 * 24 * 60 * 60 * 1000);
+
+                // Listen for new messages
+                messagesListener = roomRef.orderByChild('timestamp').startAt(oneWeekAgo).on('value', (snapshot) => {
+                    messagesContainer.innerHTML = '';
+                    const messages = snapshot.val();
+                    if (messages) {
+                        Object.values(messages).forEach(message => {
+                            displayMessage(message);
+                        });
+                    }
+                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                }, (error) => {
+                    console.error("Error listening to messages:", error);
+                });
+            });
+        }
+
+        // Display a message in the chat
+        function displayMessage(message) {
+            const messageElement = document.createElement('div');
+            const isSelf = auth.currentUser.uid === message.uid;
+
+            let timestamp = '';
+            if (message.timestamp) {
+                const date = new Date(message.timestamp);
+                timestamp = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+
+            messageElement.className = `flex ${isSelf ? 'justify-end' : 'justify-start'}`;
+            messageElement.innerHTML = `
+                <div class="flex flex-col space-y-1 ${isSelf ? 'items-end' : 'items-start'} max-w-xs md:max-w-md">
+                    <span class="text-xs ${isSelf ? 'text-gray-500' : 'text-gray-400'}">${message.name || message.email.split('@')[0]}</span>
+                    <div class="p-3 rounded-xl shadow-md ${isSelf ? 'bg-indigo-500 text-white rounded-br-none' : 'bg-white rounded-bl-none'}" style="overflow-wrap: break-word;">
+                        ${message.text}
+                    </div>
+                    <span class="text-xs text-gray-400">${timestamp}</span>
+                </div>
+            `;
+            messagesContainer.appendChild(messageElement);
+        }
+
+        // Event listeners
+        googleLoginBtn.addEventListener('click', () => {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            auth.signInWithPopup(provider)
+                .then((result) => {
+                    // Signed in successfully
+                    console.log("Signed in with Google:", result.user);
+                }).catch((error) => {
+                    console.error("Google login error:", error);
+                    showMessage(authMessage, `Google Login Error: ${error.message}`);
+                });
+        });
+
+        createRoomBtn.addEventListener('click', () => {
+            const roomName = prompt("Enter a new room name:");
+            const roomPassword = prompt("Set a password for the room:");
+            if (roomName && roomPassword) {
+                setupRoom(roomName, roomPassword);
+            }
+        });
+
+        joinRoomBtn.addEventListener('click', () => {
+            const roomName = prompt("Enter the room name:");
+            const roomPassword = prompt("Enter the room password:");
+            if (roomName && roomPassword) {
+                setupRoom(roomName, roomPassword);
+            }
+        });
+
+        messageForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const text = messageInput.value.trim();
+            if (text && roomRef) {
+                const newMessage = {
+                    text: text,
+                    uid: auth.currentUser.uid,
+                    name: auth.currentUser.displayName,
+                    email: auth.currentUser.email,
+                    timestamp: firebase.database.ServerValue.TIMESTAMP
+                };
+                roomRef.push(newMessage).then(() => {
+                    messageInput.value = '';
+                }).catch(error => {
+                    console.error("Failed to send message:", error);
+                });
+            }
+        });
+
+        backToRoomsBtn.addEventListener('click', () => {
+            if (messagesListener) {
+                messagesListener(); // Unsubscribe from current room
+            }
+            showRoomSelectionUI();
+        });
+
+        logoutBtn.addEventListener('click', () => {
+            auth.signOut();
+        });
+
+        logoutBtnChat.addEventListener('click', () => {
+            auth.signOut();
+        });
+
+        // Initialize the app on window load
+        window.onload = () => {
+            loadingOverlay.classList.remove('hidden');
+            initializeFirebase();
+        };
+    </script>
+</body>
+</html>
+
